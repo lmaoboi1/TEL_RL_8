@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fresh iPhone Drop</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --apple-blue: #0071e3;
+            --apple-blue-hover: #0077ed;
+            --bg-color: #f5f5f7;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            color: #1d1d1f;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Ambient Background Blur */
+        .ambient-bg {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80vw;
+            height: 80vh;
+            background: radial-gradient(circle, rgba(0,113,227,0.03) 0%, rgba(245,245,247,0) 70%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* Case Container Design */
+        .case-track {
+            position: relative;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            border-radius: 2.5rem;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.05), 
+                        inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+            overflow: hidden;
+            padding: 1.5rem 0;
+        }
+
+        .case-items-wrapper {
+            display: flex;
+            align-items: center;
+            will-change: transform;
+            height: 240px;
+        }
+
+        /* Card Design */
+        .case-item {
+            flex: 0 0 170px;
+            height: 220px;
+            margin: 0 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            border-radius: 1.5rem;
+            background: #ffffff;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            border: 1px solid rgba(0,0,0,0.02);
+            padding: 1rem 0.5rem;
+        }
+
+        /* Soft rarity glows instead of harsh borders */
+        .case-item::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at bottom, var(--glow-color), transparent 70%);
+            opacity: 0.15;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .case-item:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        .case-item:hover::before {
+            opacity: 0.3;
+        }
+
+        /* The Target Frame (Center Indicator) */
+        .target-frame {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 194px; /* Slightly wider than item */
+            height: 244px; /* Slightly taller than item */
+            border: 2px solid var(--apple-blue);
+            border-radius: 1.75rem;
+            box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.1),
+                        inset 0 0 20px rgba(0, 113, 227, 0.05);
+            pointer-events: none;
+            z-index: 30;
+            backdrop-filter: blur(1px);
+        }
+
+        /* Winner Item Animation */
+        .winner-card {
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15), 
+                        0 0 0 2px var(--apple-blue) !important;
+            animation: float 3s ease-in-out infinite;
+            z-index: 40 !important;
+        }
+        
+        @keyframes float {
+            0% { transform: translateY(0px) scale(1.05); }
+            50% { transform: translateY(-10px) scale(1.05); }
+            100% { transform: translateY(0px) scale(1.05); }
+        }
+
+        /* Primary Button Style */
+        .btn-apple {
+            background-color: var(--apple-blue);
+            color: white;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-apple:hover {
+            background-color: var(--apple-blue-hover);
+            transform: scale(1.02);
+            box-shadow: 0 10px 25px rgba(0, 113, 227, 0.3);
+        }
+
+        .btn-apple:active {
+            transform: scale(0.98);
+        }
+
+        .btn-apple:disabled {
+            background-color: #d2d2d7;
+            color: #f5f5f7;
+            transform: none;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        /* Smooth opening state pulse */
+        .btn-apple.is-opening:disabled {
+            background-color: var(--apple-blue);
+            opacity: 0.8;
+            cursor: wait;
+            animation: soft-pulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+        }
+
+        @keyframes soft-pulse {
+            0%, 100% { opacity: 0.9; }
+            50% { opacity: 0.6; }
+        }
+
+        /* Modal specific styling */
+        #result-modal {
+            background: rgba(245, 245, 247, 0.8);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+        }
+
+        .modal-content-panel {
+            background: #ffffff;
+            border-radius: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15),
+                        0 0 0 1px rgba(0,0,0,0.02);
+        }
+
+        /* Hide elements gracefully */
+        .fade-transition {
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+        
+        /* Edge gradients for the track */
+        .track-gradient-left, .track-gradient-right {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 15%;
+            pointer-events: none;
+            z-index: 20;
+        }
+        .track-gradient-left {
+            left: 0;
+            background: linear-gradient(to right, rgba(255,255,255,0.9) 0%, transparent 100%);
+            border-top-left-radius: 2.5rem;
+            border-bottom-left-radius: 2.5rem;
+        }
+        .track-gradient-right {
+            right: 0;
+            background: linear-gradient(to left, rgba(255,255,255,0.9) 0%, transparent 100%);
+            border-top-right-radius: 2.5rem;
+            border-bottom-right-radius: 2.5rem;
+        }
+
+        /* Image transitions */
+        .device-image {
+            filter: drop-shadow(0 15px 15px rgba(0,0,0,0.1));
+            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .case-item:hover .device-image {
+            transform: scale(1.1) translateY(-5px);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center relative">
+    
+    <div class="ambient-bg"></div>
+
+    <div class="w-full h-full flex flex-col justify-center items-center relative z-10 px-4 sm:px-8 max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <div class="text-center mb-12 lg:mb-16 flex flex-col items-center">
+            <div class="relative">
+                <div class="absolute inset-0 blur-2xl bg-black/5 rounded-full scale-150"></div>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original" alt="Apple Logo" class="h-16 sm:h-20 md:h-24 object-contain relative z-10 opacity-90 transition-transform duration-700 hover:scale-105" onerror="this.onerror=null; this.src='https://placehold.co/200x200/f5f5f7/1d1d1f?text=Drop';">
+            </div>
+            <h1 class="text-xl sm:text-2xl font-semibold mt-6 text-slate-800 tracking-tight">Experience the Drop</h1>
+        </div>
+
+        <!-- Case Track Area -->
+        <div class="w-full mb-16 relative px-2">
+            <div class="case-track">
+                
+                <div class="track-gradient-left"></div>
+                
+                <!-- Center Indicator -->
+                <div class="target-frame"></div>
+                
+                <div class="case-items-wrapper" id="case-items">
+                    <!-- Items will be injected here -->
+                </div>
+                
+                <div class="track-gradient-right"></div>
+            </div>
+        </div>
+
+        <!-- Action Button -->
+        <div class="flex justify-center w-full px-4 mt-4">
+            <button id="open-btn" class="btn-apple text-white font-semibold py-4 px-16 rounded-full text-xl focus:outline-none w-full max-w-[320px] tracking-wide">
+                Start Drop
+            </button>
+        </div>
+        
+    </div>
+
+    <!-- Result Modal (Glassmorphism) -->
+    <div id="result-modal" class="fixed inset-0 hidden items-center justify-center z-50 opacity-0 transition-opacity duration-500">
+        <div class="modal-content-panel p-10 max-w-md w-full mx-4 transform scale-95 transition-transform duration-500 overflow-hidden flex flex-col items-center" id="modal-content">
+            
+            <!-- View 1: Device Result -->
+            <div id="view-result" class="text-center w-full fade-transition">
+                <h2 class="text-2xl font-bold text-slate-900 mb-2 tracking-tight">Device Secured</h2>
+                <p class="text-slate-500 text-sm mb-8">Ready for deployment.</p>
+                
+                <div class="flex justify-center my-6 h-80 w-full">
+                    <!-- Removing the duplicate text. The card injected here will contain the image and name elegantly -->
+                    <div id="result-item" class="w-full h-full flex justify-center items-center">
+                         <!-- Injected result card -->
+                    </div>
+                </div>
+                
+                <button id="claim-btn" class="btn-apple mt-6 text-white font-semibold py-4 px-8 rounded-full w-full text-lg shadow-md">
+                    Configure Delivery
+                </button>
+            </div>
+
+            <!-- View 2: Location Map -->
+            <div id="view-map" class="text-center w-full fade-transition hidden">
+                <h2 class="text-2xl font-bold text-slate-900 mb-2 tracking-tight">Delivery Location</h2>
+                <p class="text-slate-500 mb-8 text-sm">Pinpoint your exact receiving coordinates.</p>
+                
+                <div id="delivery-map" class="w-full h-72 bg-slate-100 rounded-3xl mb-8 shadow-inner border border-slate-200/60 overflow-hidden z-10"></div>
+                
+                <button id="confirm-location-btn" disabled class="btn-apple text-white font-semibold py-4 px-8 rounded-full w-full text-lg shadow-md">
+                    Confirm Destination
+                </button>
+            </div>
+
+            <!-- View 3: Success & Countdown -->
+            <div id="view-success" class="text-center w-full fade-transition hidden">
+                <div class="text-6xl mb-6 mt-4">📦</div>
+                <h2 class="text-2xl font-bold text-slate-900 mb-2 tracking-tight">Order Confirmed</h2>
+                <p class="text-slate-500 mb-10 text-sm">Your hardware is being prepared for immediate dispatch.</p>
+                
+                <div class="bg-slate-50 p-8 rounded-3xl mb-8 border border-slate-100">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-3">Estimated Dispatch</p>
+                    <div id="countdown-timer" class="text-5xl font-semibold text-slate-800 tracking-tighter font-mono">24:00:00</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Data structure with updated colors matching the soft theme
+        const items = [
+            { name: 'iPhone 16 Teal', image: 'https://ya-ua.fra1.digitaloceanspaces.com/uploads/previews/iphone-16-128gb-teal-myed3-ua1.png', rarity: 'Common', glow: 'rgba(148, 163, 184, 0.4)', badge: 'bg-slate-100 text-slate-600', chance: 40 },
+            { name: 'iPhone 16 Plus White', image: 'https://ya-ua.fra1.digitaloceanspaces.com/uploads/previews/iphone-16-plus-256gb-white-e-sim1.webp', rarity: 'Common', glow: 'rgba(148, 163, 184, 0.4)', badge: 'bg-slate-100 text-slate-600', chance: 30 },
+            { name: 'iPhone 16 Pro Max Desert', image: 'https://ya-ua.fra1.digitaloceanspaces.com/uploads/previews/iphone-16-pro-max-512gb-desert-titanium-ua1.png', rarity: 'Uncommon', glow: 'rgba(59, 130, 246, 0.4)', badge: 'bg-blue-50 text-blue-600', chance: 15 },
+            { name: 'iPhone 17 Pro Max Silver', image: 'https://ya-ua.fra1.digitaloceanspaces.com/uploads/previews/iphone-17-pro-max-256-gb-silver4.webp', rarity: 'Rare', glow: 'rgba(168, 85, 247, 0.4)', badge: 'bg-purple-50 text-purple-600', chance: 10 },
+            { name: 'iPhone 17 Pro Max Orange', image: 'https://ya-ua.fra1.digitaloceanspaces.com/uploads/previews/iphone-17-pro-max-512-gb-cosmic-orange-mfyt41.webp', rarity: 'Legendary', glow: 'rgba(234, 179, 8, 0.5)', badge: 'bg-yellow-50 text-yellow-700 border border-yellow-200', chance: 1 },
+            { name: 'iPhone Air Space Black', image: 'https://ya-ua.fra1.digitaloceanspaces.com/uploads/previews/iphone-17-air-256gb-space-black-now1.webp', rarity: 'Epic', glow: 'rgba(236, 72, 153, 0.4)', badge: 'bg-pink-50 text-pink-600', chance: 4 }
+        ];
+
+        // Layout constants
+        const itemWidth = 194; // 170px width + 24px margins (12px each side)
+        const numItemsToGenerate = 100;
+        
+        // DOM Elements
+        const caseItemsContainer = document.getElementById('case-items');
+        const openBtn = document.getElementById('open-btn');
+        const resultModal = document.getElementById('result-modal');
+        const modalContent = document.getElementById('modal-content');
+        
+        const viewResult = document.getElementById('view-result');
+        const viewMap = document.getElementById('view-map');
+        const viewSuccess = document.getElementById('view-success');
+        
+        const claimBtn = document.getElementById('claim-btn');
+        const confirmLocationBtn = document.getElementById('confirm-location-btn');
+        
+        const resultItemContainer = document.getElementById('result-item');
+        
+        // App State
+        let isOpening = false;
+        let map = null;
+        let mapMarker = null;
+        let countdownInterval = null;
+
+        function getRandomItem() {
+            const rand = Math.random() * 100;
+            let cumulativeChance = 0;
+            
+            for (const item of items) {
+                cumulativeChance += item.chance;
+                if (rand <= cumulativeChance) {
+                    return item;
+                }
+            }
+            return items[0];
+        }
+
+        // isResult parameter ensures we style it perfectly for the modal context
+        function createItemElement(item, isResult = false) {
+            const div = document.createElement('div');
+            
+            // Set dynamic glow variable for CSS
+            div.style.setProperty('--glow-color', item.glow);
+            
+            // Apply class names based on context
+            div.className = `case-item ${isResult ? 'winner-card w-full h-full max-w-[280px]' : ''}`;
+            
+            // We use a cleaner card layout. The text is beautifully integrated inside the card, 
+            // so we don't need duplicate text outside of it in the modal.
+            div.innerHTML = `
+                <div class="w-full flex justify-center z-10">
+                    <span class="text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full ${item.badge}">
+                        ${item.rarity}
+                    </span>
+                </div>
+                <div class="flex-1 w-full flex justify-center items-center relative z-10 p-2">
+                    <img src="${item.image}" alt="${item.name}" class="device-image max-h-[120px] ${isResult ? 'max-h-[180px]' : ''} w-auto object-contain">
+                    ${item.rarity === 'Legendary' && isResult ? '<div class="absolute top-0 right-4 text-2xl animate-pulse drop-shadow-lg">✨</div>' : ''}
+                </div>
+                <div class="w-full text-center z-10 pb-1">
+                    <div class="font-medium text-[13px] text-slate-800 tracking-tight">${item.name}</div>
+                </div>
+            `;
+            return div;
+        }
+
+        function setupCase() {
+            caseItemsContainer.innerHTML = '';
+            caseItemsContainer.style.transition = 'none';
+            caseItemsContainer.style.transform = 'translateX(0)';
+
+            // Populate the track with random items
+            for (let i = 0; i < numItemsToGenerate; i++) {
+                const item = getRandomItem();
+                const el = createItemElement(item);
+                caseItemsContainer.appendChild(el);
+            }
+        }
+
+        function openCase() {
+            if (isOpening) return;
+            isOpening = true;
+            
+            // UI Button state update
+            openBtn.disabled = true;
+            openBtn.classList.add('is-opening');
+            openBtn.innerHTML = `
+                <span class="flex items-center justify-center gap-2">
+                    <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                </span>
+            `;
+
+            setupCase();
+
+            // Rig the drop logic (Winner between 75 and 85 for a long, suspenseful spin)
+            const winningIndex = Math.floor(Math.random() * (85 - 75 + 1)) + 75;
+            
+            // Guarantee Legendary win
+            const actualWinner = items.find(item => item.rarity === 'Legendary');
+            
+            // Swap out visually generated item with actual winner
+            const winningNode = caseItemsContainer.children[winningIndex];
+            const newWinningNode = createItemElement(actualWinner);
+            caseItemsContainer.replaceChild(newWinningNode, winningNode);
+
+            // Calculate precise pixel distance
+            const containerWidth = document.querySelector('.case-track').offsetWidth;
+            const centerOffset = containerWidth / 2;
+            
+            // Add a cinematic variation so it doesn't always land perfectly dead center
+            const randomOffsetWithinCard = (Math.random() * 80) - 40; 
+            
+            const distanceToMove = (winningIndex * itemWidth) - centerOffset + (itemWidth / 2) + randomOffsetWithinCard;
+
+            // Apply an Apple-like refined cubic-bezier for a snappy start and a painfully slow, buttery stop
+            caseItemsContainer.style.transition = 'transform 9s cubic-bezier(0.15, 0, 0, 1)';
+            
+            // Micro-delay to ensure DOM registers the reset position before applying transform
+            setTimeout(() => {
+                caseItemsContainer.style.transform = `translateX(-${distanceToMove}px)`;
+            }, 50);
+
+            // Wait for spin to finish before revealing modal
+            setTimeout(() => {
+                showResult(actualWinner, caseItemsContainer.children[winningIndex]);
+            }, 9200); // slightly longer than animation to let it settle
+        }
+
+        function showResult(winner, winningElement) {
+            // Highlight element in track
+            winningElement.classList.add('winner-card');
+
+            setTimeout(() => {
+                // Prepare Modal View
+                resultItemContainer.innerHTML = '';
+                
+                // Create larger, detailed card exclusively for the modal
+                const modalItem = createItemElement(winner, true);
+                resultItemContainer.appendChild(modalItem);
+                
+                // Note: The extra text label is successfully removed here as requested.
+                // The elegant card alone communicates the device name and rarity.
+
+                // Animate Modal In
+                resultModal.classList.remove('hidden');
+                resultModal.classList.add('flex');
+                
+                // Trigger reflow
+                void resultModal.offsetWidth;
+                
+                resultModal.classList.remove('opacity-0');
+                modalContent.classList.remove('scale-95');
+                modalContent.classList.add('scale-100');
+
+                // Reset Views internally
+                viewResult.classList.remove('hidden');
+                viewMap.classList.add('hidden');
+                viewSuccess.classList.add('hidden');
+
+                // Restore Main Button
+                isOpening = false;
+                openBtn.disabled = false;
+                openBtn.classList.remove('is-opening');
+                openBtn.textContent = 'Start Drop';
+            }, 1200); // 1.2s delay to admire the landed item on track
+        }
+
+        function switchView(hideView, showViewId) {
+            hideView.classList.add('opacity-0', 'scale-95');
+            
+            setTimeout(() => {
+                hideView.classList.add('hidden');
+                hideView.classList.remove('opacity-0', 'scale-95');
+                
+                const showElement = document.getElementById(showViewId);
+                showElement.classList.remove('hidden');
+                
+                // Reflow
+                void showElement.offsetWidth;
+                
+                if (showViewId === 'view-map') {
+                    initMap();
+                } else if (showViewId === 'view-success') {
+                    triggerConfetti();
+                    startCountdown();
+                }
+            }, 300); // Wait for fade out
+        }
+
+        function initMap() {
+            setTimeout(() => {
+                if (!map) {
+                    // Initialize Leaflet in Cupertino coordinates for theme appropriateness
+                    map = L.map('delivery-map').setView([37.3346, -122.0090], 13);
+                    
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                        attribution: '&copy; OpenStreetMap contributors'
+                    }).addTo(map);
+
+                    map.on('click', function(e) {
+                        if (mapMarker) {
+                            mapMarker.setLatLng(e.latlng);
+                        } else {
+                            mapMarker = L.marker(e.latlng).addTo(map);
+                        }
+                        confirmLocationBtn.disabled = false;
+                    });
+                } else {
+                    map.invalidateSize();
+                }
+            }, 100);
+        }
+
+        function triggerConfetti() {
+            const duration = 2500;
+            const end = Date.now() + duration;
+
+            (function frame() {
+                confetti({
+                    particleCount: 4,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0 },
+                    colors: ['#0071e3', '#f5f5f7', '#d2d2d7']
+                });
+                confetti({
+                    particleCount: 4,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1 },
+                    colors: ['#0071e3', '#f5f5f7', '#d2d2d7']
+                });
+
+                if (Date.now() < end) {
+                    requestAnimationFrame(frame);
+                }
+            }());
+        }
+
+        function startCountdown() {
+            let timeLeft = 24 * 60 * 60; // 24 hours
+            const timerEl = document.getElementById('countdown-timer');
+            
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            const updateTimer = () => {
+                const h = Math.floor(timeLeft / 3600).toString().padStart(2, '0');
+                const m = Math.floor((timeLeft % 3600) / 60).toString().padStart(2, '0');
+                const s = (timeLeft % 60).toString().padStart(2, '0');
+                
+                timerEl.textContent = `${h}:${m}:${s}`;
+                
+                if (timeLeft > 0) {
+                    timeLeft--;
+                } else {
+                    clearInterval(countdownInterval);
+                }
+            };
+            
+            updateTimer();
+            countdownInterval = setInterval(updateTimer, 1000);
+        }
+
+        // Event Listeners
+        openBtn.addEventListener('click', openCase);
+        claimBtn.addEventListener('click', () => switchView(viewResult, 'view-map'));
+        confirmLocationBtn.addEventListener('click', () => switchView(viewMap, 'view-success'));
+        
+        // Initialize layout on load
+        setupCase();
+    </script>
+</body>
+</html>
